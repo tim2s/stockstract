@@ -10,3 +10,7 @@ class TestParseValueExtractor(TestCase):
 
     self.assertEqual(parse_german_float(string), float(2629))
 
+  def test_minus(self):
+    string = '-'
+
+    self.assertEqual(parse_german_float(string), float(0))
