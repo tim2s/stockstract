@@ -3,7 +3,13 @@ import json
 import urllib.request
 
 from extractor import Extractor
+from indexer import Indexer
 from url_builder import company_details_url
+
+
+def main2():
+  with codecs.open("xamples/dax.html", "r", "utf-8") as html_file:
+    indexer = Indexer(html_file)
 
 
 def main():
@@ -20,7 +26,8 @@ def main():
 
     url = company_details_url(notion)
     with urllib.request.urlopen(url) as html_file:
-    #with codecs.open("xamples/kurse_einzelkurs_profil96056.html", "r", "utf-8") as html_file:
+      # for local test, run
+      # with codecs.open("xamples/kurse_einzelkurs_profil96056.html", "r", "utf-8") as html_file:
 
       extractor = Extractor(html_file.read(), url)
       stock_main_data = extractor.content()
@@ -32,4 +39,4 @@ def main():
 
 
 if __name__ == "__main__":
-  main()
+  main2()
