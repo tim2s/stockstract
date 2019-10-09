@@ -1,4 +1,6 @@
 import datetime
+import sys
+
 
 from bs4 import BeautifulSoup
 
@@ -56,6 +58,14 @@ def extract_years_header(table, title):
   return years
 
 
+def has_header(table, title):
+  if len(table.tr("th")) == 0:
+    return False
+  else:
+    table_title = table.tr("th")[0].contents[0].string
+    return table_title == title
+
+
 class Extractor:
 
   def __init__(self, file_content, reference):
@@ -92,25 +102,28 @@ class Extractor:
 
   def content(self):
 
+    print('Starting to extract content of ', self.head())
+
     tables = self.content_section("table")
 
-    owner_structure = self.extract_owners(tables[0])
+    if len(tables) > 0:
 
-    balance_sheet = self.extract_balance_sheet(tables[2])
+      owner_structure = self.extract_owners(tables[0])
+      balance_sheet = self.extract_balance_sheet(self.find_table(tables, 'Bilanz'))
+      income_statement = self.extract_kpi(self.find_table(tables, 'Gewinn- und Verlustrechnung'), 'Gewinn- und Verlustrechnung')
+      cash_flow = self.extract_kpi(self.find_table(tables, 'Jahrescashflow'), 'Jahrescashflow')
+      stock_data = self.extract_kpi(self.find_table(tables, 'Wertpapierdaten'), 'Wertpapierdaten')
+      kpi_data = self.extract_kpi(self.find_table(tables, 'Bewertungszahlen'), 'Bewertungszahlen')
+      employees = self.extract_kpi(self.find_table(tables, 'Mitarbeiter'), 'Mitarbeiter')
+      all_kpi = {**income_statement, **cash_flow, **stock_data, **kpi_data, **employees}
 
-    income_statement = self.extract_kpi(tables[3], 'Gewinn- und Verlustrechnung')
+      return {'balance_sheet': balance_sheet, 'head': self.head(), 'owner_structure': owner_structure, 'kpi': all_kpi}
+    else:
+      print('!! FOUND FOULTY STUFF HERE ...', self.head())
+      return None
 
-    cash_flow = self.extract_kpi(tables[4], 'Jahrescashflow')
-
-    stock_data = self.extract_kpi(tables[5], 'Wertpapierdaten')
-
-    kpi_data = self.extract_kpi(tables[6], 'Bewertungszahlen')
-
-    employees = self.extract_kpi(tables[7], 'Mitarbeiter')
-
-    all_kpi = {**income_statement, **cash_flow, **stock_data, **kpi_data, **employees}
-
-    return {'balance_sheet': balance_sheet, 'head': self.head(), 'owner_structure': owner_structure, 'kpi': all_kpi}
+  def find_table(self, tables, title):
+    return [table for table in tables if has_header(table, title)][0]
 
   def extract_owners(self, owner_table):
 
@@ -118,7 +131,7 @@ class Extractor:
     all_rows = owner_table("tr")
     for row in all_rows:
       cells = row("td")
-      if cells:
+      if cells and len(cells) > 1:
         owner_data.append({
           'owner': cells[0].string,
           'percent': extract_percent(cells[1].string)
@@ -138,9 +151,7 @@ class Extractor:
       row_name = columns[0].string
 
       kpi_field = translate_row(row_name)
-      if kpi_field is None:
-        print('unitentified row', row_name)
-      else:
+      if kpi_field is not None:
         row_values = []
         for column_index in range(1, len(columns)):
           value = parse_german_float(columns[column_index].string)
