@@ -1,7 +1,6 @@
 import datetime
 import sys
 
-
 from bs4 import BeautifulSoup
 
 from value_extractor import extract_money, extract_percent, parse_german_float
@@ -29,11 +28,11 @@ def translate_row(row_name):
     'Fremdkapitalquote': 'gearingRatio',
     'Dividende': 'dividend',
     'Dividende je Aktie': 'dividendPerShare',
-    'Gewinn je Aktie': 'earningsPerShare',
+    'Ergebnis je Aktie verwässert': 'earningsPerShare',
     'Operatives Ergebnis': 'operatingProfit',
     'Jahresüberschuss': 'earnings',
     'Forschungs- und Entwicklungskosten': 'researchAndDevelopment',
-    'Ausstehende Aktien in Mio.': 'amountOfSharesOutstanding',
+    'Ausstehende Aktien in Mio. (verwässert)': 'amountOfSharesOutstanding',
     'Cash flow': 'cashFlow',
     'Cashflow aus der Investitionstätigkeit': 'cashFlowFromInvestments',
     'Cashflow aus der Finanzierungstätigkeit': 'cashFlowFromFinance',
@@ -105,25 +104,40 @@ class Extractor:
     print('Starting to extract content of ', self.head())
 
     tables = self.content_section("table")
+    owner_structure_table = self.find_table(tables, 'Aktionär')
+    balance_sheet_table = self.find_table(tables, 'Bilanz')
+    income_statement_table = self.find_table(tables, 'Gewinn- und Verlustrechnung')
+    cash_flow_table = self.find_table(tables, 'Jahrescashflow')
+    stock_data_table = self.find_table(tables, 'Wertpapierdaten')
+    kpi_data_table = self.find_table(tables, 'Bewertungszahlen')
+    employee_table = self.find_table(tables, 'Mitarbeiter')
 
-    if len(tables) > 0:
-
-      owner_structure = self.extract_owners(tables[0])
-      balance_sheet = self.extract_balance_sheet(self.find_table(tables, 'Bilanz'))
-      income_statement = self.extract_kpi(self.find_table(tables, 'Gewinn- und Verlustrechnung'), 'Gewinn- und Verlustrechnung')
-      cash_flow = self.extract_kpi(self.find_table(tables, 'Jahrescashflow'), 'Jahrescashflow')
-      stock_data = self.extract_kpi(self.find_table(tables, 'Wertpapierdaten'), 'Wertpapierdaten')
-      kpi_data = self.extract_kpi(self.find_table(tables, 'Bewertungszahlen'), 'Bewertungszahlen')
-      employees = self.extract_kpi(self.find_table(tables, 'Mitarbeiter'), 'Mitarbeiter')
+    if None not in [owner_structure_table, balance_sheet_table, income_statement_table, cash_flow_table, stock_data_table, kpi_data_table, employee_table]:
+      owner_structure = self.extract_owners(owner_structure_table)
+      balance_sheet = self.extract_balance_sheet(balance_sheet_table)
+      income_statement = self.extract_kpi(income_statement_table, 'Gewinn- und Verlustrechnung')
+      cash_flow = self.extract_kpi(cash_flow_table, 'Jahrescashflow')
+      stock_data = self.extract_kpi(stock_data_table, 'Wertpapierdaten')
+      kpi_data = self.extract_kpi(kpi_data_table, 'Bewertungszahlen')
+      employees = self.extract_kpi(employee_table, 'Mitarbeiter')
       all_kpi = {**income_statement, **cash_flow, **stock_data, **kpi_data, **employees}
 
-      return {'balance_sheet': balance_sheet, 'head': self.head(), 'owner_structure': owner_structure, 'kpi': all_kpi}
-    else:
-      print('!! FOUND FOULTY STUFF HERE ...', self.head())
-      return None
+      if self.kpi_are_valid(all_kpi):
+        return {'balance_sheet': balance_sheet, 'head': self.head(), 'owner_structure': owner_structure, 'kpi': all_kpi}
+    print('!! FOUND FOULTY STUFF HERE ...', self.head())
+    return None
+
+  def kpi_are_valid(self, all_kpi):
+    return any('dividendPerShare' == key for key in all_kpi.keys()) \
+           and any('earningsPerShare' == key for key in all_kpi.keys()) \
+           and any('bookValuePerShare' == key for key in all_kpi.keys())
 
   def find_table(self, tables, title):
-    return [table for table in tables if has_header(table, title)][0]
+    corresponding = [table for table in tables if has_header(table, title)][:1]
+    if len(corresponding) > 0:
+      return corresponding[0]
+    else:
+      return None
 
   def extract_owners(self, owner_table):
 
